@@ -1,0 +1,140 @@
+syntax = "proto3";
+package tglog_v3;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/tencent/game-log-sdk-proto/pbgo";
+option java_package = "tencent.com.tglog.v3.proto.java";
+
+//协议版本号
+enum ProtoVer{
+  option allow_alias = true;
+  VER_USELESS = 0;
+  MAJOR = 0;                          //主版本号
+  MINOR = 2;                          //次版本号
+  PATCH = 0;                          //补丁版本号
+}
+
+//魔数
+enum Magic{
+  MAGIC_USELESS = 0;
+  VAL = 0x0601;                       //魔数值
+}
+
+
+enum Len{
+  option allow_alias = true;
+  LEN_USELESS = 0;
+  MAGIC = 2;                          //魔数字段2字节
+  PACKAGE = 4;                        //包长字段4字节，包长=帧头长度+包头长度（变长）+包体长度（变长），帧头长度=魔数字段（2）+包长字段(4)+标记字段（1）+包头长字段（2）+保留字段（1）=10字节
+  FLAGS = 1;                          //标记字段1字节
+  HEADER = 2;                         //包头长度2字节
+  RESERVE = 1;                        //预留字段1字节
+}
+
+//最大值
+enum Max{
+  MAX_USELESS = 0;
+  LOG_COUNT = 100;                    //一个请求中最大日志条数
+  UDP_LOG_SIZE = 64512;               //UDP最大请求大小63KB（注：UDP最大请求为65507，只剩下65507-64512=995填充请求头及上下文）
+  RAW_UDP_LOG_SIZE = 65507;           //裸UDP最大请求为65507  
+  TCP_LOG_SIZE = 524288;              //TCP最大请求大小512KB
+}
+
+//单条日志
+message Log{
+  string name = 1;                    //日志名，如"login"，需要额外填日志名，是为了方便生成指标数据
+  string content = 2;                 //日志内容，如：login|2022-06-1 12:00:00|a|b|c|d
+  uint64 seq = 3;                     //序号，确认用
+}
+
+//鉴权请求
+message AuthReq{
+  map<string, string> labels = 1;      //标签
+  map<string, string> annotations = 2; //注解
+}
+
+//鉴权响应
+message AuthRsp{
+  string token = 1;                   //令牌
+}
+
+//日志上报请求
+message LogReq{
+  map<string, string> labels = 1;      //标签
+  map<string, string> annotations = 2; //注解
+  repeated Log logs = 3;               //日志数组
+}
+
+//日志上报响应
+message LogRsp{
+  repeated uint64 seqs = 1;           //日志序列号
+}
+
+//心跳请求
+message HeartbeatReq{
+  google.protobuf.Timestamp ping = 1;
+}
+
+//心跳响应
+message HeartbeatRsp{
+  google.protobuf.Timestamp pong = 1;
+}
+
+//请求头
+message ReqHeader{
+  string appID = 1;                   //业务ID
+  string appName = 2;                 //业务名
+  string appVer = 3;                  //业务版本号
+  string sdkLang = 4;                 //SDK语言
+  string sdkVer = 5;                  //SDK版本号
+  string sdkOS = 6;                   //SDK操作系统
+  string network = 7;                 //网络协议，tcp/udp
+  string protoVer = 8;                //协议版本号
+  string hostIP = 9;                  //客户端IP
+  google.protobuf.Timestamp ts = 10;  //时间戳
+  string token = 11;                  //令牌，公网环境才需要
+  string tokenType = 12;              //令牌类型，支持bearer/tglog两种token，bearer即JWT，tglog为自定义的一种token
+  string sig = 13;                    //签名，公网环境才需要
+}
+
+//请求
+// 请求因为涉及到鉴权、签名，将请求头和请求包体分开，
+// 客户端构造请求包体，压缩、加密、签名，再构造请求头，
+// 服务器先解析请求头，鉴权、校验签名，再处理请求包体。
+message Req{
+  string reqID = 1;                   //请求ID
+  bytes appMetaData = 2;              //应用层元数据，可以携带任何数据，在响应中原样返回
+  oneof req{
+    AuthReq authReq = 11;             //鉴权请求
+    LogReq logReq = 12;               //日志请求
+    HeartbeatReq heartbeatReq = 13;   //心跳请求
+  }
+}
+
+//响应头
+message RspHeader{
+  int32 code = 1;                     //错误码
+  string msg = 2;                     //错误信息
+  string reqID = 3;                   //请求ID
+  bytes appMetaData = 4;              //应用层元数据
+}
+
+//响应
+message Rsp{
+  RspHeader header = 1;               //响应头，为了简化响应的处理，响应头和响应包体合并 ，客户端直接解包即可
+  oneof rsp{
+    AuthRsp authRsp = 11;             //鉴权响应
+    LogRsp logRsp = 12;               //日志响应
+    HeartbeatRsp heartbeatRsp = 13;   //心跳请求
+  }
+}
+
+//标记位
+enum Flag{
+  FLAG_NONE = 0;                      //无
+  FLAG_COMPRESSED = 1;                //消息已压缩
+  FLAG_ENCRYPTED = 2;                 //消息已加密
+  FLAG_COMPRESSED_HEADER = 4;         //消息头已压缩
+  FLAG_ENCRYPTED_HEADER = 8;          //消息头已加密
+}
