@@ -8,7 +8,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	v3 "tglog-proto/pbgo"
+	v3 "github.com/tencent/game-log-sdk-proto/pbgo"
 )
 
 var (

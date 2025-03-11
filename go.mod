@@ -1,4 +1,4 @@
-module tglog-proto
+module github.com/tencent/game-log-sdk-proto
 
 go 1.21
 
